@@ -3,6 +3,49 @@ set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS ON)
 
 project(zlib C)
 
+option(CALIbuilder "Build with CALI" OFF)  # Define CALIbuilder option
+
+if(CALIbuilder)
+    #######################cali
+    set(CMAKE_C_COMPILER clang-7)
+    set(CMAKE_CXX_COMPILER clang++-7)
+    set(CALI_CONFIG_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+    set(CALI_DIR "/home/a402/workspace/Cali-library-isolation/build/")
+
+    add_library(CALI_ISOLATION_OPTIONS INTERFACE)
+
+    # 设置编译生成llvm IR bitcode 中间代码文件 而不是本地机器代码
+    target_compile_options(CALI_ISOLATION_OPTIONS
+        INTERFACE -emit-llvm
+    )
+
+    # 设置链接时使用exld链接器，并指定配置文件
+    target_link_options(CALI_ISOLATION_OPTIONS
+                        INTERFACE -fuse-ld=${CALI_DIR}/cali-linker/cali
+                                -Wl,--cali-config=${CALI_CONFIG_PATH}/config_cali.yaml -v)
+else()
+    #######################异构语言沙箱
+    set(CMAKE_C_COMPILER clang)
+    set(CMAKE_CXX_COMPILER clang++)
+    set(EXLD_CONFIG_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+    set(EXLD_DIR "/root/workspace/mllib-sandbox/sandbox/build")
+
+    add_library(EXLD_ISOLATION_OPTIONS INTERFACE)
+
+    # 设置编译生成llvm IR bitcode 中间代码文件 而不是本地机器代码
+    target_compile_options(EXLD_ISOLATION_OPTIONS
+        INTERFACE -emit-llvm
+    )
+
+    # 设置链接时使用exld链接器，并指定配置文件
+    target_link_options(EXLD_ISOLATION_OPTIONS
+                        INTERFACE --ld-path=${EXLD_DIR}/bin/exld
+                                -Wl,--exld-config=${EXLD_CONFIG_PATH}/config_exld.yaml
+                                -L ${EXLD_DIR}/lib
+                                -Wl,-rpath=${EXLD_DIR}/lib
+                                )
+endif()
+
 set(VERSION "1.3.1.1")
 
 option(ZLIB_BUILD_EXAMPLES "Enable Zlib Examples" ON)
@@ -204,11 +247,19 @@ endif()
 #============================================================================
 if(ZLIB_BUILD_EXAMPLES)
     add_executable(example test/example.c)
-    target_link_libraries(example zlib)
+    if(CALIbuilder)
+    target_link_libraries(example zlib CALI_ISOLATION_OPTIONS)
+        else()
+    target_link_libraries(example zlib EXLD_ISOLATION_OPTIONS)
+    endif()
     add_test(example example)
 
     add_executable(minigzip test/minigzip.c)
-    target_link_libraries(minigzip zlib)
+    if(CALIbuilder)
+    target_link_libraries(minigzip zlib CALI_ISOLATION_OPTIONS)
+        else()
+    target_link_libraries(minigzip zlib EXLD_ISOLATION_OPTIONS)
+    endif()
 
     if(HAVE_OFF64_T)
         add_executable(example64 test/example.c)
